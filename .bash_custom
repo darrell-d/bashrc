@@ -1,6 +1,7 @@
-# configuration for customization
+# Personal overrides copied into ~/.bash_custom on first install.
+# Keep machine-specific aliases here.
 
-alias ..code='cd /mnt/c/Users/ddefreitas.exe/My\ Documents/wordpress'
+alias ..code='cd ~/code'
 alias foundation='ssh foundation'
 alias darrelld='ssh darrelld'
 

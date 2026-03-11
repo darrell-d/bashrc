@@ -1,2 +1,321 @@
-# .bashrc
-# Used for non interactive shells
+# Shared interactive-shell extras loaded by install.sh
+
+__basrc_has() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+__basrc_source_if_exists() {
+    if [ -f "$1" ]; then
+        . "$1"
+    fi
+}
+
+__basrc_ls() {
+    if command ls --color=auto -d . >/dev/null 2>&1; then
+        command ls --color=auto "$@"
+    elif command ls -G -d . >/dev/null 2>&1; then
+        command ls -G "$@"
+    else
+        command ls "$@"
+    fi
+}
+
+# For when I forget to use sudo
+alias fuck='sudo $(history -p \!\!)'
+
+# Preferred ls usage and typo anticipation
+alias ls='__basrc_ls -la'
+alias sl='__basrc_ls -la'
+alias lsnc='command ls -la'
+alias ll='__basrc_ls -lh'
+alias la='__basrc_ls -A'
+alias l='__basrc_ls -CF'
+
+alias cd..='cd ..'
+alias ..='cd ..'
+alias ...='cd ../..'
+alias .3='cd ../../../'
+alias .4='cd ../../../../'
+
+up() {
+    local count="${1:-1}"
+    local counter=0
+
+    if ! [[ "$count" =~ ^[0-9]+$ ]]; then
+        echo "Usage: up <levels>"
+        return 1
+    fi
+
+    while [ "$counter" -lt "$count" ]; do
+        cd .. || return 1
+        counter=$((counter + 1))
+    done
+}
+
+mkcd() {
+    local dir="${1:-}"
+
+    if [ -z "$dir" ]; then
+        echo "Usage: mkcd <directory>"
+        return 1
+    fi
+
+    mkdir -p "$dir" && cd "$dir"
+}
+
+take() {
+    mkcd "$1"
+}
+
+goto() {
+    local destination="${1:-}"
+    local name
+
+    if [ -z "$destination" ]; then
+        echo "Usage: goto <path>"
+        return 1
+    fi
+
+    cd "$destination" || return 1
+    read -r -p "Save path as: " name
+
+    if [ -n "$name" ]; then
+        printf '%s:%s\n' "$name" "$PWD" >> "$HOME/.goto"
+    fi
+
+    if [ -f "$HOME/.goto" ]; then
+        while IFS='' read -r line || [ -n "$line" ]; do
+            echo "$line"
+        done < "$HOME/.goto"
+    fi
+}
+
+cdf() {
+    if ! __basrc_has fzf; then
+        echo "cdf requires fzf"
+        return 1
+    fi
+
+    local dir
+    dir="$(find "${1:-.}" -type d 2>/dev/null | fzf)" || return 1
+    cd "$dir" || return 1
+}
+
+alias cls='clear'
+alias howfull='df -h'
+alias foldersize='du -h | less'
+
+du1() {
+    if du --max-depth=1 -h . >/dev/null 2>&1; then
+        du -h --max-depth=1 "${1:-.}"
+    else
+        du -h -d 1 "${1:-.}"
+    fi
+}
+
+largest() {
+    du -ah "${1:-.}" 2>/dev/null | sort -hr | head -20
+}
+
+extract() {
+    if [ -z "${1:-}" ]; then
+        echo "Usage: extract <archive>"
+    elif [ -f "$1" ]; then
+        case $1 in
+            *.tar.bz2) tar xvjf "$1" ;;
+            *.tar.gz) tar xvzf "$1" ;;
+            *.tar.xz) tar xvJf "$1" ;;
+            *.lzma) unlzma "$1" ;;
+            *.bz2) bunzip2 "$1" ;;
+            *.rar) unrar x -ad "$1" ;;
+            *.gz) gunzip "$1" ;;
+            *.tar) tar xvf "$1" ;;
+            *.tbz2) tar xvjf "$1" ;;
+            *.tgz) tar xvzf "$1" ;;
+            *.zip) unzip "$1" ;;
+            *.Z) uncompress "$1" ;;
+            *.7z) 7z x "$1" ;;
+            *.xz) unxz "$1" ;;
+            *.exe) cabextract "$1" ;;
+            *) echo "extract: '$1' - unknown archive method" ;;
+        esac
+    else
+        echo "$1 - file does not exist"
+    fi
+}
+
+extract_here() {
+    extract "$1"
+}
+
+backup() {
+    local target="${1:-}"
+
+    if [ -z "$target" ] || [ ! -e "$target" ]; then
+        echo "Usage: backup <path>"
+        return 1
+    fi
+
+    cp -R "$target" "$target.bak"
+}
+
+ff() {
+    if ! __basrc_has fzf; then
+        echo "ff requires fzf"
+        return 1
+    fi
+
+    find "${1:-.}" -type f 2>/dev/null | fzf
+}
+
+rgf() {
+    if ! __basrc_has rg || ! __basrc_has fzf; then
+        echo "rgf requires rg and fzf"
+        return 1
+    fi
+
+    rg --files "${1:-.}" 2>/dev/null | fzf
+}
+
+lt() {
+    local root="${1:-.}"
+    local depth="${2:-2}"
+
+    if __basrc_has eza; then
+        eza -T -L "$depth" "$root"
+    elif __basrc_has tree; then
+        tree -L "$depth" "$root"
+    else
+        find "$root" -maxdepth "$depth" -print 2>/dev/null
+    fi
+}
+
+reload() {
+    . "$HOME/.bash_profile"
+    . "$HOME/.bashrc"
+}
+
+path() {
+    printf '%s\n' "$PATH" | tr ':' '\n'
+}
+
+myip() {
+    if __basrc_has curl; then
+        curl -fsS https://api.ipify.org && printf '\n'
+    elif __basrc_has wget; then
+        wget -qO- https://api.ipify.org && printf '\n'
+    else
+        echo "myip requires curl or wget"
+        return 1
+    fi
+}
+
+ports() {
+    if __basrc_has ss; then
+        ss -tulpn
+    elif __basrc_has lsof; then
+        lsof -i -P -n
+    elif __basrc_has netstat; then
+        netstat -an
+    else
+        echo "ports requires ss, lsof, or netstat"
+        return 1
+    fi
+}
+
+serve() {
+    local port="${1:-8000}"
+
+    if __basrc_has python3; then
+        python3 -m http.server "$port"
+    elif __basrc_has python; then
+        python -m SimpleHTTPServer "$port"
+    else
+        echo "serve requires python3 or python"
+        return 1
+    fi
+}
+
+dps() {
+    if ! __basrc_has docker; then
+        echo "dps requires docker"
+        return 1
+    fi
+
+    docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+}
+
+gst() {
+    git status -sb "$@"
+}
+
+gco() {
+    git checkout "$@"
+}
+
+gsw() {
+    if git help switch >/dev/null 2>&1; then
+        git switch "$@"
+    else
+        git checkout "$@"
+    fi
+}
+
+gcm() {
+    git commit -m "$*"
+}
+
+gl() {
+    git log --oneline --graph --decorate -20 "$@"
+}
+
+gundo() {
+    git reset --soft HEAD~1
+}
+
+branchpurge() {
+    git branch --merged | while IFS= read -r branch; do
+        branch="${branch#\* }"
+        branch="${branch#  }"
+
+        case "$branch" in
+            ""|master|main|dev)
+                continue
+                ;;
+        esac
+
+        git branch -d "$branch"
+    done
+}
+
+if __basrc_has fortune && __basrc_has cowsay && { __basrc_has shuf || __basrc_has gshuf; }; then
+    :
+fi
+
+if [ -d "${HOME}/.asdf" ]; then
+    __basrc_source_if_exists "$HOME/.asdf/asdf.sh"
+    __basrc_source_if_exists "$HOME/.asdf/completions/asdf.bash"
+fi
+
+export NVM_DIR="$HOME/.nvm"
+__basrc_source_if_exists "$NVM_DIR/nvm.sh"
+
+__basrc_source_if_exists "$HOME/.ssh_alias"
+__basrc_source_if_exists "$HOME/.bashrc_custom"
+__basrc_source_if_exists "$HOME/.bash_custom"
+__basrc_source_if_exists "$HOME/.bashrc_local"
+
+do_updates() {
+    if __basrc_has apt-get; then
+        sudo apt-get update && sudo apt-get upgrade -y
+    elif __basrc_has yum; then
+        sudo yum update -y
+    elif __basrc_has dnf; then
+        sudo dnf upgrade -y
+    elif __basrc_has brew; then
+        brew update && brew upgrade
+    else
+        echo "No supported package manager found."
+        return 1
+    fi
+}
